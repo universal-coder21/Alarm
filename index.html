@@ -1,0 +1,261 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Enhanced Multi-Alarm App with Snooze</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0-alpha1/dist/css/bootstrap.min.css" rel="stylesheet">
+    <style>
+        body {
+            background-color: #f8f9fa;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+        }
+        .alarm-container {
+            background-color: white;
+            padding: 40px;
+            border-radius: 15px;
+            box-shadow: 0 4px 10px rgba(0, 0, 0, 0.1);
+            width: 100%;
+            max-width: 500px;
+        }
+        .alarm-list {
+            margin-top: 30px;
+        }
+        .alarm-item {
+            background-color: #e9ecef;
+            padding: 10px;
+            border-radius: 10px;
+            margin-bottom: 10px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        .btn-remove {
+            background-color: #dc3545;
+            border: none;
+            color: white;
+            padding: 5px 10px;
+            border-radius: 5px;
+        }
+        .countdown {
+            font-size: 0.9rem;
+            color: #6c757d;
+        }
+        .btn-icon {
+            padding: 5px 10px;
+            background-color: #e0e0e0;
+            border-radius: 5px;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+        }
+        .btn-icon:hover {
+            background-color: #c9c9c9;
+        }
+    </style>
+</head>
+<body>
+
+<div class="container">
+    <div class="alarm-container">
+        <h1 class="text-center">Enhanced Multi-Alarm App</h1>
+        
+        <input type="time" id="alarmTime" class="form-control mt-3" placeholder="Set Alarm Time" />
+        <input type="text" id="alarmLabel" class="form-control mt-2" placeholder="Alarm Label (Optional)" />
+        <select id="alarmSound" class="form-select mt-2">
+            <option value="apple.mp3">Default Alarm</option>
+            <option value="hi.mp3">Chimes</option>
+            <option value="Hello.mp3">Birds</option>
+        </select>
+        <input type="range" id="alarmVolume" class="form-range mt-2" min="0" max="1" step="0.1" value="0.5" title="Volume">
+        <div class="form-check mt-2">
+            <input class="form-check-input" type="checkbox" id="repeatAlarm" />
+            <label class="form-check-label" for="repeatAlarm">Repeat Daily</label>
+        </div>
+        <button id="setAlarmBtn" class="btn btn-primary mt-3 w-100">Set Alarm</button>
+
+        <div class="alarm-list" id="alarmList"></div>
+
+        <!-- Modal for Alarm Alert -->
+        <div class="modal fade" id="alarmModal" tabindex="-1" aria-labelledby="alarmModalLabel" aria-hidden="true">
+            <div class="modal-dialog modal-dialog-centered">
+                <div class="modal-content">
+                    <div class="modal-header">
+                        <h5 class="modal-title" id="alarmModalLabel">Alarm</h5>
+                        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                    </div>
+                    <div class="modal-body">
+                        <p id="modalMessage">Your alarm is ringing!</p>
+                        <p id="modalDetails"></p>
+                    </div>
+                    <div class="modal-footer">
+                        <button type="button" class="btn btn-danger" data-bs-dismiss="modal" onclick="stopAlarm()">Stop</button>
+                        <button type="button" class="btn btn-warning" data-bs-dismiss="modal" onclick="snoozeAlarm()">Snooze (5 mins)</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <audio id="alarmSoundElement" preload="auto"></audio>
+    </div>
+</div>
+
+<script>
+    let alarms = [];
+    let snoozeTimeout;
+
+    // Load alarms from localStorage on page load
+    window.onload = function() {
+        const savedAlarms = JSON.parse(localStorage.getItem('alarms')) || [];
+        alarms = savedAlarms;
+        displayAlarms();
+    };
+
+    // Save alarms to localStorage
+    function saveAlarms() {
+        localStorage.setItem('alarms', JSON.stringify(alarms));
+    }
+
+    document.getElementById('setAlarmBtn').addEventListener('click', () => {
+        const inputTime = document.getElementById('alarmTime').value;
+        const alarmLabel = document.getElementById('alarmLabel').value || 'No Label';
+        const soundChoice = document.getElementById('alarmSound').value;
+        const volume = document.getElementById('alarmVolume').value;
+        const repeat = document.getElementById('repeatAlarm').checked;
+
+        if (!inputTime) {
+            alert('Please set a time for the alarm.');
+            return;
+        }
+
+        const now = new Date();
+        const alarmTime = new Date(now.toDateString() + ' ' + inputTime);
+        if (alarmTime < now) {
+            alarmTime.setDate(alarmTime.getDate() + 1); // Set for the next day if time is in the past
+        }
+
+        const timeToAlarm = alarmTime.getTime() - now.getTime();
+        const alarmId = setTimeout(() => {
+            triggerAlarm(alarmLabel, soundChoice, volume);
+            if (repeat) {
+                alarms.push(setRecurringAlarm(alarmTime, soundChoice, volume, alarmLabel));
+            }
+        }, timeToAlarm);
+
+        const alarmObj = {
+            id: alarmId,
+            time: alarmTime.toLocaleTimeString([], {hour: '2-digit', minute: '2-digit'}),
+            label: alarmLabel,
+            sound: soundChoice,
+            volume: volume,
+            repeat: repeat
+        };
+        alarms.push(alarmObj);
+        saveAlarms();  // Save to localStorage
+        displayAlarms();
+    });
+
+    // Display the list of alarms
+    function displayAlarms() {
+        const alarmListContainer = document.getElementById('alarmList');
+        alarmListContainer.innerHTML = '';
+        alarms.forEach((alarm, index) => {
+            alarmListContainer.innerHTML += `
+                <div class="alarm-item">
+                    <div>
+                        <span>${alarm.time} - ${alarm.label}</span>
+                        <p class="countdown" id="countdown${index}"></p>
+                    </div>
+                    <button class="btn-remove" onclick="removeAlarm(${index})">Remove</button>
+                </div>
+            `;
+            startCountdown(alarm, index);
+        });
+    }
+
+    // Countdown Timer
+    function startCountdown(alarm, index) {
+        const countdownElem = document.getElementById(`countdown${index}`);
+        const alarmTime = new Date(Date.now() + (new Date(alarm.time) - Date.now()));
+        const countdownInterval = setInterval(() => {
+            const now = new Date();
+            const timeLeft = new Date(alarmTime - now);
+            const minutes = timeLeft.getMinutes();
+            const seconds = timeLeft.getSeconds();
+            countdownElem.textContent = `Time left: ${minutes}m ${seconds}s`;
+
+            if (minutes <= 0 && seconds <= 0) {
+                clearInterval(countdownInterval);
+            }
+        }, 1000);
+    }
+
+    // Remove an alarm
+    function removeAlarm(index) {
+        clearTimeout(alarms[index].id);
+        alarms.splice(index, 1);
+        saveAlarms();  // Save updated alarms to localStorage
+        displayAlarms();
+    }
+
+    // Trigger alarm
+    function triggerAlarm(label, sound, volume) {
+        const alarmSound = document.getElementById('alarmSoundElement');
+        alarmSound.src = sound;
+        alarmSound.volume = volume;
+        alarmSound.loop = true; // Loop the sound until it's stopped
+        alarmSound.play();
+
+        setTimeout(() => {
+            alarmSound.loop = false; // Stop looping after 60 seconds
+            alarmSound.pause();
+            alarmSound.currentTime = 0;
+        }, 60000); // Stop after 1 minute
+
+        if (navigator.vibrate) {
+            navigator.vibrate([500, 500, 500]); // Vibration pattern
+        } else {
+            document.getElementById('modalMessage').textContent = `Your alarm "${label}" is ringing!`;
+            const alarmModal = new bootstrap.Modal(document.getElementById('alarmModal'));
+            alarmModal.show();
+        }
+    }
+
+    // Stop the alarm
+    function stopAlarm() {
+        const alarmSound = document.getElementById('alarmSoundElement');
+        alarmSound.pause();
+        alarmSound.currentTime = 0;
+        clearTimeout(snoozeTimeout);
+    }
+
+    // Snooze the alarm for 5 minutes
+    function snoozeAlarm() {
+        stopAlarm();
+        snoozeTimeout = setTimeout(() => {
+            triggerAlarm('Snoozed Alarm', document.getElementById('alarmSound').value, document.getElementById('alarmVolume').value);
+        }, 5 * 60 * 1000); // 5 minutes
+    }
+
+    // Set recurring alarm
+    function setRecurringAlarm(alarmTime, sound, volume, label) {
+        const now = new Date();
+        const nextDay = new Date(alarmTime);
+        nextDay.setDate(now.getDate() + 1); // Set for the next day
+
+        const timeToNextAlarm = nextDay.getTime() - now.getTime();
+        return setTimeout(() => {
+            triggerAlarm(label, sound, volume);
+            setRecurringAlarm(alarmTime, sound, volume, label); // Recursively set alarm for next day
+        }, timeToNextAlarm);
+    }
+</script>
+
+
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0-alpha1/dist/js/bootstrap.bundle.min.js"></script>
+</body>
+</html>
