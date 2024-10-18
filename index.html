@@ -112,6 +112,26 @@
     window.onload = function() {
         const savedAlarms = JSON.parse(localStorage.getItem('alarms')) || [];
         alarms = savedAlarms;
+
+        // Re-set the alarms based on the saved time
+        alarms.forEach((alarm, index) => {
+            const now = new Date().getTime();
+            const alarmTime = new Date(alarm.time).getTime();
+            const timeToAlarm = alarmTime - now;
+
+            if (timeToAlarm > 0) {
+                alarm.id = setTimeout(() => {
+                    triggerAlarm(alarm.label, alarm.sound, alarm.volume);
+                    if (alarm.repeat) {
+                        alarms.push(setRecurringAlarm(alarmTime, alarm.sound, alarm.volume, alarm.label));
+                    }
+                }, timeToAlarm);
+            } else {
+                // If the time has already passed, remove the expired alarm
+                alarms.splice(index, 1);
+            }
+        });
+
         displayAlarms();
     };
 
@@ -148,7 +168,7 @@
 
         const alarmObj = {
             id: alarmId,
-            time: alarmTime.toLocaleTimeString([], {hour: '2-digit', minute: '2-digit'}),
+            time: alarmTime.toISOString(), // Store the exact time in ISO format
             label: alarmLabel,
             sound: soundChoice,
             volume: volume,
@@ -167,7 +187,7 @@
             alarmListContainer.innerHTML += `
                 <div class="alarm-item">
                     <div>
-                        <span>${alarm.time} - ${alarm.label}</span>
+                        <span>${new Date(alarm.time).toLocaleTimeString([], {hour: '2-digit', minute: '2-digit'})} - ${alarm.label}</span>
                         <p class="countdown" id="countdown${index}"></p>
                     </div>
                     <button class="btn-remove" onclick="removeAlarm(${index})">Remove</button>
@@ -180,7 +200,7 @@
     // Countdown Timer
     function startCountdown(alarm, index) {
         const countdownElem = document.getElementById(`countdown${index}`);
-        const alarmTime = new Date(Date.now() + (new Date(alarm.time) - Date.now()));
+        const alarmTime = new Date(alarm.time);
         const countdownInterval = setInterval(() => {
             const now = new Date();
             const timeLeft = new Date(alarmTime - now);
